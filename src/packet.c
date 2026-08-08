@@ -17,10 +17,11 @@
 #include <string.h>
 #include "init.h"
 #include "mainboard_status_protocol.h"
-#include "MPU6050_driver.h"
-#include "error_event.h"
 
 char packet_flag;
+static int infrared = -1;
+static int flat = -1;
+static int chip = -1;
 
 extern int max_shot_strength_set;
 
@@ -40,8 +41,6 @@ extern int do_power_monitor(void);
 
 extern int frequency;
 
-static u8 mainboard_status_page = MAINBOARD_STATUS_PAGE_MOTOR;
-static u8 mainboard_status_sequence = 0;
 
 static int mainboard_status_scaled_value(float value, int scale)
 {
@@ -72,70 +71,18 @@ static void mainboard_status_put_s16_le(char *q, int offset, int value)
 static void mainboard_status_fill(char *q)
 {
 	int i;
-	u8 power_flags;
 
-	if(mainboard_status_page == MAINBOARD_STATUS_PAGE_MOTOR)
+	q[6] = (char)MAINBOARD_STATUS_PAGE_MOTOR;
+	for(i = 0; i < CHANNEL_NUM; i++)
 	{
-		q[6] = (char)MAINBOARD_STATUS_PAGE_MOTOR;
-		for(i = 0; i < CHANNEL_NUM; i++)
-		{
-			mainboard_status_put_s16_le(q, 7 + i * 2,
-				mainboard_status_scaled_value(N2V(g_robot.wheels[i].cur_speed),
-					MAINBOARD_STATUS_MOTOR_SCALE));
-			mainboard_status_put_s16_le(q, 15 + i * 2,
-				mainboard_status_scaled_value(g_robot.wheels[i].speed,
-					MAINBOARD_STATUS_MOTOR_SCALE));
-		}
-	}
-	else
-	{
-		#if MPU6050_GYRO_USED
-		Get_Motion_data_full(&acc_gyro_adc, &acc_gyro_actul);
-		#endif
-
-		q[6] = (char)MAINBOARD_STATUS_PAGE_IMU;
-		q[7] = (char)mainboard_status_sequence++;
-		mainboard_status_put_s16_le(q, 8,
-			mainboard_status_scaled_value(acc_gyro_actul.GYRO_x,
-				MAINBOARD_STATUS_GYRO_SCALE));
-		mainboard_status_put_s16_le(q, 10,
-			mainboard_status_scaled_value(acc_gyro_actul.GYRO_y,
-				MAINBOARD_STATUS_GYRO_SCALE));
-		mainboard_status_put_s16_le(q, 12,
-			mainboard_status_scaled_value(acc_gyro_actul.GYRO_z,
-				MAINBOARD_STATUS_GYRO_SCALE));
-		mainboard_status_put_s16_le(q, 14,
-			mainboard_status_scaled_value(acc_gyro_actul.ACC_x,
-				MAINBOARD_STATUS_ACCEL_SCALE));
-		mainboard_status_put_s16_le(q, 16,
-			mainboard_status_scaled_value(acc_gyro_actul.ACC_y,
-				MAINBOARD_STATUS_ACCEL_SCALE));
-		mainboard_status_put_s16_le(q, 18,
-			mainboard_status_scaled_value(acc_gyro_actul.ACC_z,
-				MAINBOARD_STATUS_ACCEL_SCALE));
-		q[20] = (char)g_robot.mode;
-		q[21] = (char)error_flag.all;
-
-		power_flags = 0;
-		if(g_robot.is_cap_low)
-		{
-			power_flags |= MAINBOARD_STATUS_POWER_CAP_LOW;
-		}
-		if(g_robot.is_pow_low)
-		{
-			power_flags |= MAINBOARD_STATUS_POWER_BAT_LOW;
-		}
-		q[22] = (char)power_flags;
+		mainboard_status_put_s16_le(q, 7 + i * 2,
+			mainboard_status_scaled_value(N2V(g_robot.wheels[i].cur_speed),
+				MAINBOARD_STATUS_MOTOR_SCALE));
+		mainboard_status_put_s16_le(q, 15 + i * 2,
+			mainboard_status_scaled_value(g_robot.wheels[i].speed,
+				MAINBOARD_STATUS_MOTOR_SCALE));
 	}
 
-	if(mainboard_status_page == MAINBOARD_STATUS_PAGE_MOTOR)
-	{
-		mainboard_status_page = MAINBOARD_STATUS_PAGE_IMU;
-	}
-	else
-	{
-		mainboard_status_page = MAINBOARD_STATUS_PAGE_MOTOR;
-	}
 }
 
 /******************************************************************************
@@ -330,6 +277,16 @@ int packet(char *q)
 		{
 			packet_flag = 0;
 		}
+		if((infrared >= 0 && infrared != now_infra)
+			|| (flat >= 0 && flat != finish_shoot)
+			|| (chip >= 0 && chip != finish_chip))
+		{
+			n = 1;
+			infrared = 0;
+			flat = 0;
+			chip = 0;
+			packet_flag = 1;
+		}
 	}			
 	else
 	{
@@ -506,6 +463,17 @@ int decode_packet_robot( packet_robot_t *packet, unsigned char *data, int len )
 	packet->speed_rot = packet->speed_rot | high_value_r;
 	temp = data[6*pos+6];
 	packet->speed_rot = ( ( temp & 0x02 ) ? ( -packet->speed_rot ) : packet->speed_rot );
+	if(len >= PACKET_LEN
+		&& data[pos + MAINBOARD_CONTROL_FEEDBACK_OFFSET]
+			!= MAINBOARD_CONTROL_FEEDBACK_UNKNOWN)
+	{
+		infrared = (data[pos + MAINBOARD_CONTROL_FEEDBACK_OFFSET]
+			& MAINBOARD_CONTROL_FEEDBACK_INFRARED) != 0;
+		flat = (data[pos + MAINBOARD_CONTROL_FEEDBACK_OFFSET]
+			& MAINBOARD_CONTROL_FEEDBACK_FLAT) != 0;
+		chip = (data[pos + MAINBOARD_CONTROL_FEEDBACK_OFFSET]
+			& MAINBOARD_CONTROL_FEEDBACK_CHIP) != 0;
+	}
 
 	//处理回包信息
 	// if(data[pos+22]!=255){
