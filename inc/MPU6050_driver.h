@@ -149,6 +149,7 @@ extern MPU6050_ACC_GYRO_ANGEL acc_agro_angel;
 int InitMPU6050(void);
 unsigned int Get_RegData(unsigned char REG_Address);
 void Get_Motion_data(MPU6050_ACC_GYRO_ADC *acc_gyro_adc,MPU6050_ACC_GYRO_MEASUREMENT *acc_gyro_actual);
+void Get_Motion_data_full(MPU6050_ACC_GYRO_ADC *acc_gyro_adc,MPU6050_ACC_GYRO_MEASUREMENT *acc_gyro_actual);
 void Lowpass_1nd_caulate(MPU6050_ACC_GYRO_MEASUREMENT meam,LOWPASS_1ND_PARAMETER factory);
 unsigned char MPU6050_WHO_AM_I(unsigned char i2c_mode);
 void Caulate_adc_offset(void);

@@ -197,6 +197,7 @@ int do_power_monitor(void)
 	EN_INT();
 
 	retflag = is_power_low();
+	g_robot.is_pow_low = (retflag != 0);
     if( retflag )
 	{ 
 		if(is_low_power_cnt < 5)
@@ -782,6 +783,5 @@ void SysTick_Handler(void)
 	do_timer();
 
 }
-
 
 

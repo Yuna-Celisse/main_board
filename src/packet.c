@@ -16,6 +16,9 @@
 #include "timer.h"
 #include <string.h>
 #include "init.h"
+#include "mainboard_status_protocol.h"
+#include "MPU6050_driver.h"
+#include "error_event.h"
 
 char packet_flag;
 
@@ -36,6 +39,104 @@ unsigned char identify_success = 1;   //ÈÏÖ¤³É¹¦±êÖ¾Î» 1 ÈÏÖ¤³É¹¦ 0 ÈÏÖ¤Ê§°Ü ³õÊ
 extern int do_power_monitor(void);
 
 extern int frequency;
+
+static u8 mainboard_status_page = MAINBOARD_STATUS_PAGE_MOTOR;
+static u8 mainboard_status_sequence = 0;
+
+static int mainboard_status_scaled_value(float value, int scale)
+{
+	float scaled_value;
+
+	scaled_value = value * (float)scale;
+	if(scaled_value > 32767.0f)
+	{
+		return 32767;
+	}
+	if(scaled_value < -32768.0f)
+	{
+		return -32768;
+	}
+
+	return (int)scaled_value;
+}
+
+static void mainboard_status_put_s16_le(char *q, int offset, int value)
+{
+	u16 encoded_value;
+
+	encoded_value = (u16)(s16)value;
+	q[offset] = (char)(encoded_value & 0xff);
+	q[offset + 1] = (char)((encoded_value >> 8) & 0xff);
+}
+
+static void mainboard_status_fill(char *q)
+{
+	int i;
+	u8 power_flags;
+
+	if(mainboard_status_page == MAINBOARD_STATUS_PAGE_MOTOR)
+	{
+		q[6] = (char)MAINBOARD_STATUS_PAGE_MOTOR;
+		for(i = 0; i < CHANNEL_NUM; i++)
+		{
+			mainboard_status_put_s16_le(q, 7 + i * 2,
+				mainboard_status_scaled_value(N2V(g_robot.wheels[i].cur_speed),
+					MAINBOARD_STATUS_MOTOR_SCALE));
+			mainboard_status_put_s16_le(q, 15 + i * 2,
+				mainboard_status_scaled_value(g_robot.wheels[i].speed,
+					MAINBOARD_STATUS_MOTOR_SCALE));
+		}
+	}
+	else
+	{
+		#if MPU6050_GYRO_USED
+		Get_Motion_data_full(&acc_gyro_adc, &acc_gyro_actul);
+		#endif
+
+		q[6] = (char)MAINBOARD_STATUS_PAGE_IMU;
+		q[7] = (char)mainboard_status_sequence++;
+		mainboard_status_put_s16_le(q, 8,
+			mainboard_status_scaled_value(acc_gyro_actul.GYRO_x,
+				MAINBOARD_STATUS_GYRO_SCALE));
+		mainboard_status_put_s16_le(q, 10,
+			mainboard_status_scaled_value(acc_gyro_actul.GYRO_y,
+				MAINBOARD_STATUS_GYRO_SCALE));
+		mainboard_status_put_s16_le(q, 12,
+			mainboard_status_scaled_value(acc_gyro_actul.GYRO_z,
+				MAINBOARD_STATUS_GYRO_SCALE));
+		mainboard_status_put_s16_le(q, 14,
+			mainboard_status_scaled_value(acc_gyro_actul.ACC_x,
+				MAINBOARD_STATUS_ACCEL_SCALE));
+		mainboard_status_put_s16_le(q, 16,
+			mainboard_status_scaled_value(acc_gyro_actul.ACC_y,
+				MAINBOARD_STATUS_ACCEL_SCALE));
+		mainboard_status_put_s16_le(q, 18,
+			mainboard_status_scaled_value(acc_gyro_actul.ACC_z,
+				MAINBOARD_STATUS_ACCEL_SCALE));
+		q[20] = (char)g_robot.mode;
+		q[21] = (char)error_flag.all;
+
+		power_flags = 0;
+		if(g_robot.is_cap_low)
+		{
+			power_flags |= MAINBOARD_STATUS_POWER_CAP_LOW;
+		}
+		if(g_robot.is_pow_low)
+		{
+			power_flags |= MAINBOARD_STATUS_POWER_BAT_LOW;
+		}
+		q[22] = (char)power_flags;
+	}
+
+	if(mainboard_status_page == MAINBOARD_STATUS_PAGE_MOTOR)
+	{
+		mainboard_status_page = MAINBOARD_STATUS_PAGE_IMU;
+	}
+	else
+	{
+		mainboard_status_page = MAINBOARD_STATUS_PAGE_MOTOR;
+	}
+}
 
 /******************************************************************************
  * stop_mode_packet: 
@@ -248,7 +349,9 @@ int packet(char *q)
 	q[4] = g_robot.bat_v;
 	q[5] = g_robot.cap_v;
 	q[23] = ((frequency << 4) & 0xf0) + 0x07;
+	mainboard_status_fill(q);
 	last_infra = now_infra;
+	packet_flag = 1;
 
 	return 0;
 }
@@ -574,5 +677,3 @@ int decode_identify_packet( idenfity_cpuid_struct *id_code, unsigned char *data 
 }
 
 #endif
-
-

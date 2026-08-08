@@ -204,6 +204,23 @@ void Get_Motion_data(MPU6050_ACC_GYRO_ADC *acc_gyro_adc,MPU6050_ACC_GYRO_MEASURE
 	acc_gyro_actual->GYRO_z = (acc_gyro_adc->gyro_z -adc_offset_gyro_z )/ GYRO_SEN_SCAN_FACTOR;
 }
 
+void Get_Motion_data_full(MPU6050_ACC_GYRO_ADC *acc_gyro_adc,MPU6050_ACC_GYRO_MEASUREMENT *acc_gyro_actual)
+{
+	acc_gyro_adc->acc_x = (short)Get_RegData(ACCEL_XOUT_H);
+	acc_gyro_adc->acc_y = (short)Get_RegData(ACCEL_YOUT_H);
+	acc_gyro_adc->acc_z = (short)Get_RegData(ACCEL_ZOUT_H);
+	acc_gyro_adc->gyro_x = (short)Get_RegData(GYRO_XOUT_H);
+	acc_gyro_adc->gyro_y = (short)Get_RegData(GYRO_YOUT_H);
+	acc_gyro_adc->gyro_z = (short)Get_RegData(GYRO_ZOUT_H);
+
+	acc_gyro_actual->ACC_x = (acc_gyro_adc->acc_x - ACC_SEN_X_OFFSET) / ACC_SEN_SCAN_FACTOR;
+	acc_gyro_actual->ACC_y = (acc_gyro_adc->acc_y - ACC_SEN_Y_OFFSET) / ACC_SEN_SCAN_FACTOR;
+	acc_gyro_actual->ACC_z = (acc_gyro_adc->acc_z - ACC_SEN_Z_OFFSET) / ACC_SEN_SCAN_FACTOR;
+	acc_gyro_actual->GYRO_x = (acc_gyro_adc->gyro_x - GYRO_SEN_X_OFFSET) / GYRO_SEN_SCAN_FACTOR;
+	acc_gyro_actual->GYRO_y = (acc_gyro_adc->gyro_y - GYRO_SEN_Y_OFFSET) / GYRO_SEN_SCAN_FACTOR;
+	acc_gyro_actual->GYRO_z = (acc_gyro_adc->gyro_z - adc_offset_gyro_z) / GYRO_SEN_SCAN_FACTOR;
+}
+
 
 /*******************************************************************************
 * Function Name   : Lowpass_1nd_caulate
@@ -254,4 +271,3 @@ void Lowpass_1nd_caulate(MPU6050_ACC_GYRO_MEASUREMENT meam,LOWPASS_1ND_PARAMETER
 
 	
 }
-
