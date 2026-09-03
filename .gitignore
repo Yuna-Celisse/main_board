@@ -1,0 +1,11 @@
+# Keil µVision generated build outputs
+project/Objects/
+project/Listings/
+
+# Per-user Keil IDE and debug configuration
+project/*.uvoptx
+project/*.uvguix.*
+project/DebugConfig/*.dbgconf
+
+# Local ARM compiler installation logs
+armcc506-*.log
